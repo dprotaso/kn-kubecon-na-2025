@@ -76,4 +76,5 @@ pushd square >/dev/null
 popd >/dev/null
 
 kill %1
-wait
+
+bx func create -h | bat
