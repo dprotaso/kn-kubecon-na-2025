@@ -1,0 +1,13 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: hello
+spec:
+  template:
+    spec:
+      containerConcurrency: 1
+      containers:
+        - image: ghcr.io/knative/helloworld-go:latest
+          env:
+          - name: TARGET
+            value: KubeCon NA 2025
