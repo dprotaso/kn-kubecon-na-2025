@@ -1,0 +1,27 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: sockeye
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "1"
+        autoscaling.knative.dev/minScale: "1"
+    spec:
+      containers:
+        - image: docker.io/n3wscott/sockeye:v0.6.3@sha256:ebf670fd2766a094084ddbb2a1010ea974422847f77f25126a51758c715b2dfe
+---
+apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: sockeye
+  namespace: default
+spec:
+  broker: default
+  subscriber:
+    ref:
+      apiVersion: serving.knative.dev/v1
+      kind: Service
+      name: sockeye

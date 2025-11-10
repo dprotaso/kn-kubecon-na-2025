@@ -1,0 +1,56 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: lookup
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "1"
+        autoscaling.knative.dev/minScale: "1"
+    spec:
+      containers:
+        - image: ko://kndemo/cmd/lookup
+          env:
+          - name: DB_HOST
+            valueFrom:
+              secretKeyRef:
+                name: db-customer-secret
+                key: host
+          - name: DB_PORT
+            valueFrom:
+              secretKeyRef:
+                name: db-customer-secret
+                key: port
+          - name: DB_NAME
+            valueFrom:
+              secretKeyRef:
+                name: db-customer-secret
+                key: db
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: db-customer-secret
+                key: user
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: db-customer-secret
+                key: password
+---
+apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: lookup
+  namespace: default
+spec:
+  broker: default
+  filter:
+    attributes:
+      type: structure.new
+  subscriber:
+    ref:
+      apiVersion: serving.knative.dev/v1
+      kind: Service
+      name: lookup

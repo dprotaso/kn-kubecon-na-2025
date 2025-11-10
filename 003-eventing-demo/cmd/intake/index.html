@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>AI Complaint Portal</title>
+  <script src="/static/script.js" defer></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-gradient-to-br from-blue-50 to-pink-100 flex flex-col items-center justify-center min-h-screen">
+  <div class="bg-white p-8 rounded-2xl shadow-2xl w-[600px] text-center">
+    <h1 class="text-3xl font-bold mb-4 text-blue-700">🤖 AI Complaint Form</h1>
+    <form id="complaintForm" class="space-y-4">
+      <textarea id="complaint" name="complaint" rows="10" required
+        class="w-full h-48 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 resize-y">
+      </textarea>
+
+      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+        Submit Complaint
+      </button>
+    </form>
+
+    <p id="status" class="mt-2 text-sm text-gray-500"></p>
+
+    <div id="apologies" class="mt-8 text-gray-700 text-left">
+      <p class="font-semibold text-gray-600 mb-2">Apologies from AI:</p>
+    </div>
+  </div>
+
+  <script>
+    // Default complaint text
+    const defaultText = `Hello, my name is Jane Doe. I am writing because I am completely locked out of my account for the Gizmo-X product. I have tried the password reset link five times and it is not working. I am really frustrated because I have a deadline today and need to access my files. Can someone please help me ASAP? My email is jane.doe@example.com.`;
+
+    // Set the textarea value
+    document.getElementById("complaint").value = defaultText;
+  </script>
+</body>
+
+</html>

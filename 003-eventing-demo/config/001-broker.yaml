@@ -1,0 +1,8 @@
+---
+apiVersion: eventing.knative.dev/v1
+kind: Broker
+metadata:
+  name: default
+  namespace: default
+  annotations:
+    messaging.knative.dev/async-handler: "true"

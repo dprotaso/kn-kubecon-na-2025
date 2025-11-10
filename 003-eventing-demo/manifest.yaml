@@ -1,0 +1,354 @@
+apiVersion: eventing.knative.dev/v1
+kind: Broker
+metadata:
+  name: default
+  namespace: default
+  annotations:
+    messaging.knative.dev/async-handler: "true"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-customer-secret
+  namespace: default
+type: Opaque
+stringData:
+  host: "db-customer.default.svc.cluster.local"
+  port: "5432"
+  db: "customer"
+  user: "postgres"
+  password: "postgres"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-customer
+  namespace: default
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-customer
+  template:
+    metadata:
+      labels:
+        app: db-customer
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16.4
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: db
+            - name: LOGGING_LOG_LEVEL
+              value: "0"
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: db-customer-storage
+              mountPath: /var/lib/postgresql/data
+          imagePullPolicy: Always
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB -h 127.0.0.1
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB -h 127.0.0.1
+            initialDelaySeconds: 10
+            periodSeconds: 20
+      volumes:
+        - name: db-customer-storage
+          emptyDir: {} # This is the change from persistentVolumeClaim
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-customer
+  namespace: default
+spec:
+  selector:
+    app: db-customer
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-customer-seed
+  namespace: default
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: db-seeder
+          image: postgres:15
+          env:
+            - name: PGHOST
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: host
+            - name: PGPORT
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: port
+            - name: PGDATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: db
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: user
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: password
+          command:
+            - sh
+            - -c
+            - "echo \"⏳ Waiting for database to be ready...\"\nuntil pg_isready -h \"$PGHOST\" -p \"$PGPORT\" -U \"$PGUSER\" > /dev/null 2>&1; do\n  sleep 2\ndone\n\necho \"✅ Database is ready. Running idempotent seed SQL...\"\npsql -v ON_ERROR_STOP=1 <<'SQL'\n\n-- Create the customers table if it doesn't already exist\nCREATE TABLE IF NOT EXISTS customers (\n   customer_id VARCHAR(10) PRIMARY KEY,\n   company_name VARCHAR(255),\n   contact_name VARCHAR(255),\n   contact_email VARCHAR(255) UNIQUE,\n   country VARCHAR(100),\n   phone VARCHAR(50)\n);\n\n-- Insert sample data only if those emails don’t exist yet\nINSERT INTO customers VALUES \n  ('C-123', 'Global Tech Inc.', 'John Smith', 'john.smith@globaltech.com', 'USA', '1-800-555-1234'),\n  ('C-456', 'Acme Corp.', 'Jane Doe', 'jane.doe@example.com', 'USA', '1-800-555-4567')\nON CONFLICT DO NOTHING;\nSQL\n\necho \"\U0001F389 Database seeding complete (safe to rerun).\"\n"
+
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: apology
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "1"
+        autoscaling.knative.dev/minScale: "1"
+    spec:
+      containers:
+        - image: dprotaso/apology-a4a3c4e25e35f39b293501ae9fa18ddf@sha256:8bee8816e9c322f8edc020f1a9af31e5d6e7c327e4c9ef8824087fa80a006e91
+          env:
+            - name: LLM_API_BASE_URL
+              value: http://host.docker.internal:11434/v1
+---
+apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: apology
+  namespace: default
+spec:
+  broker: default
+  filter:
+    attributes:
+      type: lookup.new
+  subscriber:
+    ref:
+      apiVersion: serving.knative.dev/v1
+      kind: Service
+      name: apology
+
+---
+apiVersion: sources.knative.dev/v1
+kind: SinkBinding
+metadata:
+  name: svc-intake-binding
+  namespace: default
+spec:
+  # The "subject" is the workload to inject K_SINK into.
+  subject:
+    apiVersion: serving.knative.dev/v1
+    kind: Service
+    name: intake
+  # The "sink" is the destination where events should be sent.
+  # This assumes a Broker named 'default' in the same namespace.
+  # If your broker has a different name, change it here.
+  sink:
+    ref:
+      apiVersion: eventing.knative.dev/v1
+      kind: Broker
+      name: default
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: intake
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "1"
+        autoscaling.knative.dev/minScale: "1"
+    spec:
+      containers:
+        - image: dprotaso/intake-7b8757faf68e14188aba4c21fa1b5c8e@sha256:7d66a9de5691b06a3e88afc66987aaad717a07121234b5f9dfccfb324195b9f0
+---
+apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: intake
+  namespace: default
+spec:
+  broker: default
+  filter:
+    attributes:
+      type: apology.new
+  subscriber:
+    ref:
+      apiVersion: serving.knative.dev/v1
+      kind: Service
+      name: intake
+    uri: /cloudevent
+
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: lookup
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "1"
+        autoscaling.knative.dev/minScale: "1"
+    spec:
+      containers:
+        - image: dprotaso/lookup-9450947b86f2ba8d94699ed019c411b7@sha256:77c8c2e3834c4a4b5f08f3bd94dd4940990ac54f7b71274ebef2098231349d68
+          env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: port
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: db
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-customer-secret
+                  key: password
+---
+apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: lookup
+  namespace: default
+spec:
+  broker: default
+  filter:
+    attributes:
+      type: structure.new
+  subscriber:
+    ref:
+      apiVersion: serving.knative.dev/v1
+      kind: Service
+      name: lookup
+
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: sockeye
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "1"
+        autoscaling.knative.dev/minScale: "1"
+    spec:
+      containers:
+        - image: docker.io/n3wscott/sockeye:v0.6.3@sha256:ebf670fd2766a094084ddbb2a1010ea974422847f77f25126a51758c715b2dfe
+---
+apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: sockeye
+  namespace: default
+spec:
+  broker: default
+  subscriber:
+    ref:
+      apiVersion: serving.knative.dev/v1
+      kind: Service
+      name: sockeye
+
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: structure
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "1"
+        autoscaling.knative.dev/minScale: "1"
+    spec:
+      containers:
+        - image: dprotaso/structure-1b35cca1b58deabb003fce4600d82d4e@sha256:f64ce56074ebcb1774af7ad258b64185eba09a3f0c092d0bb806f4754cfd3040
+          env:
+            - name: LLM_API_BASE_URL
+              value: http://host.docker.internal:11434/v1
+---
+apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: structure
+  namespace: default
+spec:
+  broker: default
+  filter:
+    attributes:
+      type: intake.new
+  subscriber:
+    ref:
+      apiVersion: serving.knative.dev/v1
+      kind: Service
+      name: structure
+
+---
