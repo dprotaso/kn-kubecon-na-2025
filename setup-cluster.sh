@@ -4,8 +4,22 @@ set -x
 set -e
 
 
+config=$(mktemp)
+cat <<EOF > $config
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+containerdConfigPatches:
+- |
+  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+    endpoint = ["https://mirror.gcr.io"]
+nodes:
+- role: control-plane
+- role: worker
+- role: worker
+EOF
+
 kind delete cluster
-kind create cluster
+kind create cluster --config=$config
 
 kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-crds.yaml
 kubectl apply -f https://github.com/knative/eventing/releases/latest/download/eventing-crds.yaml
@@ -19,9 +33,9 @@ kubectl apply -f https://github.com/knative/eventing/releases/latest/download/in
 kubectl apply -f https://github.com/knative/eventing/releases/latest/download/mt-channel-broker.yaml
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.1/cert-manager.yaml
 
-kubectl patch svc broker-ingress -n knative-eventing -p '{"spec": {"type": "LoadBalancer"}}'
+# kubectl patch svc broker-ingress -n knative-eventing -p '{"spec": {"type": "LoadBalancer"}}'
 
-kubectl wait --for=condition=Available deployment -A --all --timeout 2m
+kubectl wait --for=condition=Available deployment -A --all --timeout 5m
 
 kubectl patch configmap/config-network \
   --namespace knative-serving \
