@@ -21,8 +21,11 @@ pushd square >/dev/null
   x func run &
   read
   bx func invoke --data '{"value":"9"}'
+  bx func deploy
+  bx func invoke --insecure --data '{"value":"9"}'
 popd >/dev/null
 
 kill %1
 
 bx func create -h | bat
+kubectl delete ksvc --all > /dev/null

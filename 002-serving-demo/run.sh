@@ -4,7 +4,7 @@ source $(git rev-parse --show-toplevel)/lib.sh
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cd $SCRIPT_DIR
 
-kubectl delete -f hello-1.yaml --ignore-not-found > /dev/null 
+kubectl delete ksvc --all > /dev/null
 
 bx bat hello-1.yaml
 bx kubectl apply -f hello-1.yaml
@@ -36,6 +36,7 @@ bx kubectl apply -f hello-4.yaml
 bx kubectl get ksvc
 bx kubectl get rev
 
+bx echo Start watching pods
 bx hey -z 30s -c 10 https://hello.default.margarita.dev
 
 echo "Diff hello-00001 and hello-00002"
@@ -51,3 +52,5 @@ diff --color $tmp1 $tmp2
 read -n1
 echo "Diff hello-00002 and hello-00003"
 diff --color $tmp2 $tmp3
+
+kubectl delete ksvc --all > /dev/null
