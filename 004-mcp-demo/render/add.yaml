@@ -1,0 +1,40 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: add
+  namespace: default
+  annotations:
+    serving.knative.dev/mcp-tool-title: "Addition Service"
+    serving.knative.dev/mcp-tool-input: |
+      {
+        "type": "object",
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of integers"
+          }
+        },
+        "required": ["args"]
+      }
+    serving.knative.dev/mcp-tool-output: |
+      {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "integer",
+            "description": "Computed result value."
+          }
+        },
+        "required": ["value"]
+      }
+spec:
+  template:
+    spec:
+      containers:
+        - image: dprotaso/math-0543c61e9840f5d7ea0aec41c17aeb34@sha256:a9f2e325066586e0d274f52d86bb0df9f7a68eaf026b957e80b7b9cbac023a4e
+          env:
+            - name: OPERATOR
+              value: add
+
+---

@@ -1,0 +1,39 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: knative-service-reader
+  namespace: default
+rules:
+- apiGroups: ["serving.knative.dev"]
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: knative-service-reader-binding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: default
+roleRef:
+  kind: Role
+  name: knative-service-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: mcp
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/min-scale: "1"
+    spec:
+      containers:
+      - image: ko://kndemo/cmd/mcp
+
